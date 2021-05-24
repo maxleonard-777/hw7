@@ -58,7 +58,9 @@ exports.handler = async function(event) {
   // create an object with the course data to hold the return value from our lambda
   let returnValue = {
     courseNumber: courseData.courseNumber,
-    name: courseData.name
+    name: courseData.name,
+    numberOfCourseReviews: [],
+    averageCourseReview: []
   }
 
   // set a new Array as part of the return value
@@ -69,17 +71,18 @@ exports.handler = async function(event) {
 
   // get the documents from the query
   let sections = sectionsQuery.docs
+  
+  // variable for course rating average
+  var courseRatingSum = 0 ;
+  var numClassReviews = 0 ;
 
-  // loop through the documents
+  // loop through the section documents
   for (let i=0; i < sections.length; i++) {
     // get the document ID of the section
     let sectionId = sections[i].id
 
     // get the data from the section
     let sectionData = sections[i].data()
-    
-    // create an Object to be added to the return value of our lambda
-    let sectionObject = {}
 
     // ask Firebase for the lecturer with the ID provided by the section; hint: read "Retrieve One Document (when you know the Document ID)" in the reference
     let lecturerQuery = await db.collection('lecturers').doc(sectionData.lecturerId).get()
@@ -87,14 +90,76 @@ exports.handler = async function(event) {
     // get the data from the returned document
     let lecturer = lecturerQuery.data()
 
-    // add the lecturer's name to the section Object
-    sectionObject.lecturerName = lecturer.name
+    // 🔥 your code for the reviews/ratings goes here
+
+    // ask Firebase for the reviews corresponding to the Document ID of the section, wait for the response
+    let reviewsQuery = await db.collection('reviews').where(`sectionId`, `==`, sectionId).get()
+
+    // find number of reviews for the section
+    let numberSecReviews = reviewsQuery.size
+
+    // get the documents from the query
+    let reviews = reviewsQuery.docs
+  
+      //define the section object
+      let sectionObject = {
+        lecturerName: lecturer.name,
+        sectionId: sectionId,
+        numberSecReviews: numberSecReviews,
+        averageSectionRating: [], 
+        reviews: [] 
+      }
+
+    //Add the reviews for each section to the result.
+    // loop through the documents
+    var ratingSum = 0 ;
+
+  for (let j=0; j < reviews.length; j++) {
+
+        // get the document ID of the review
+        let reviewId = reviews[j].id
+
+        // get the data from the section
+        let reviewData = reviews[j].data()
+        
+        // sum reviews
+        ratingSum = ratingSum + reviewData.rating 
+
+        // create an Object to be added to the return value of our lambda
+        let reviewObject = {
+          review: reviewData.rating,
+          body: reviewData.body
+        }
+      
+    // add the review Object to the sections object
+    sectionObject.reviews.push(reviewObject)
+  }
+ 
+  //(3 points) Add the aggregated number of reviews and average rating for each section of the course
+  // calcultate average section rating
+    let averageSectionRating = ratingSum/numberSecReviews
+
+    // calculate average class rating
+    courseRatingSum = courseRatingSum + ratingSum
+
+    numClassReviews = numClassReviews + numberSecReviews
+
+    // add average section rating to section object
+    sectionObject.averageSectionRating.push(averageSectionRating)
 
     // add the section Object to the return value
-    returnValue.sections.push(sectionObject)
-
-    // 🔥 your code for the reviews/ratings goes here
+    returnValue.sections.push(sectionObject)  
   }
+
+  //calculate class level average rating
+  let averageCourseRating = courseRatingSum/numClassReviews
+  
+  //(3 points) Add the aggregated number of reviews and average rating for the course
+  // add the number of course reviews to the return value
+  returnValue.numberOfCourseReviews.push(numClassReviews)
+  
+  // add the average course rating to the return value
+  returnValue.averageCourseReview.push(averageCourseRating)  
 
   // return the standard response
   return {
